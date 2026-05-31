@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二维码生成 - DevToolBox</title>
+  <meta name="description" content="在线二维码生成器，支持自定义颜色和大小，可下载PNG">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .qr-layout { display: flex; gap: 24px; flex-wrap: wrap; }
+    .qr-controls { flex: 1; min-width: 280px; }
+    .qr-preview { flex: 1; min-width: 280px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .option-group { margin-bottom: 16px; }
+    .option-group label { display: block; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    .option-group input[type="text"], .option-group textarea, .option-group select {
+      width: 100%; background: #2a2a3e; border: 1px solid #3a3a5e; color: #e0e0e0;
+      padding: 10px 12px; border-radius: 6px; font-size: 14px; box-sizing: border-box;
+    }
+    .option-group textarea { min-height: 80px; resize: vertical; font-family: 'Consolas', monospace; }
+    .color-row { display: flex; gap: 12px; }
+    .color-row > div { flex: 1; }
+    .color-row input[type="color"] {
+      width: 100%; height: 40px; border: 1px solid #3a3a5e; border-radius: 6px;
+      cursor: pointer; background: none; padding: 2px;
+    }
+    .qr-canvas-wrap {
+      background: #1e1e2e; border: 1px solid #3a3a5e; border-radius: 12px;
+      padding: 24px; display: inline-flex;
+    }
+    canvas { image-rendering: pixelated; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>📱 二维码生成</h1>
+        <p>输入文本或 URL 生成二维码，支持自定义颜色和大小</p>
+      </div>
+      <div class="qr-layout">
+        <div class="qr-controls">
+          <div class="option-group">
+            <label>内容（文本或 URL）</label>
+            <textarea id="qrText" placeholder="输入文本或 URL..." oninput="generateQR()">https://github.com</textarea>
+          </div>
+          <div class="option-group">
+            <label>大小</label>
+            <select id="qrSize" onchange="generateQR()">
+              <option value="128">128 × 128</option>
+              <option value="256" selected>256 × 256</option>
+              <option value="512">512 × 512</option>
+            </select>
+          </div>
+          <div class="color-row">
+            <div class="option-group">
+              <label>前景色</label>
+              <input type="color" id="fgColor" value="#000000" onchange="generateQR()">
+            </div>
+            <div class="option-group">
+              <label>背景色</label>
+              <input type="color" id="bgColor" value="#ffffff" onchange="generateQR()">
+            </div>
+          </div>
+        </div>
+        <div class="qr-preview">
+          <div class="qr-canvas-wrap">
+            <canvas id="qrCanvas"></canvas>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="generateQR()">生成</button>
+            <button class="btn btn-secondary" onclick="downloadQR()">下载 PNG</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    // Minimal QR Code generator (Version 1-10, Byte mode, ECC Level L/M)
+    // Simplified implementation using well-known QR encoding algorithm
+
+    const QR = (() => {
+      // GF(256) arithmetic for Reed-Solomon
+      const EXP_TABLE = new Uint8Array(256);
+      const LOG_TABLE = new Uint8Array(256);
+      (() => {
+        let x = 1;
+        for (let i = 0; i < 255; i++) {
+          EXP_TABLE[i] = x;
+          LOG_TABLE[x] = i;
+          x <<= 1;
+          if (x & 0x100) x ^= 0x11d;
+        }
+        EXP_TABLE[255] = EXP_TABLE[0];
+      })();
+
+      function gfMul(a, b) {
+        if (a === 0 || b === 0) return 0;
+        return EXP_TABLE[(LOG_TABLE[a] + LOG_TABLE[b]) % 255];
+      }
+
+      function rsGenPoly(numEC) {
+        let poly = [1];
+        for (let i = 0; i < numEC; i++) {
+          let newPoly = new Array(poly.length + 1).fill(0);
+          for (let j = 0; j < poly.length; j++) {
+            newPoly[j] ^= gfMul(poly[j], EXP_TABLE[i]);
+            newPoly[j + 1] ^= poly[j];
+          }
+          poly = newPoly;
+        }
+        return poly;
+      }
+
+      function rsEncode(data, numEC) {
+        let gen = rsGenPoly(numEC);
+        let msg = new Uint8Array(data.length + numEC);
+        msg.set(data);
+        for (let i = 0; i < data.length; i++) {
+          let coef = msg[i];
+          if (coef !== 0) {
+            for (let j = 0; j < gen.length; j++) {
+              msg[i + j] ^= gfMul(gen[j], coef);
+            }
+          }
+        }
+        return msg.slice(data.length);
+      }
+
+      // Version info: [total modules, data codewords (L), data codewords (M), EC codewords per block (L), EC per block (M), group1 blocks (L), group1 blocks (M)]
+      // Simplified: we only support byte mode, versions 1-6, ECC Level L
+      const VERSIONS = [
+        null,
+        { size: 21, dataCW: 19, ecCW: 7, totalCW: 26 },
+        { size: 25, dataCW: 34, ecCW: 10, totalCW: 44 },
+        { size: 29, dataCW: 55, ecCW: 15, totalCW: 70 },
+        { size: 33, dataCW: 80, ecCW: 20, totalCW: 100 },
+        { size: 37, dataCW: 108, ecCW: 26, totalCW: 134 },
+        { size: 41, dataCW: 136, ecCW: 18, totalCW: 154 }, // split groups
+      ];
+
+      // Alignment pattern positions per version
+      const ALIGN_POS = [null, [], [6,18], [6,22], [6,26], [6,30], [6,34]];
+
+      function getVersion(dataLen) {
+        // byte mode header: 4 bits mode + 8 bits length + data
+        for (let v = 1; v <= 6; v++) {
+          if (dataLen <= VERSIONS[v].dataCW - 2) return v; // 2 bytes overhead for byte mode header
+        }
+        return -1;
+      }
+
+      function encodeData(text, version) {
+        const v = VERSIONS[version];
+        const data = new TextEncoder().encode(text);
+        const bits = [];
+
+        // Mode indicator: 0100 (byte mode)
+        bits.push(0,1,0,0);
+        // Character count (8 bits for version 1-9)
+        const count = Math.min(data.length, 255);
+        for (let i = 7; i >= 0; i--) bits.push((count >> i) & 1);
+        // Data
+        for (let byte of data) {
+          for (let i = 7; i >= 0; i--) bits.push((byte >> i) & 1);
+        }
+        // Terminator
+        const maxBits = v.dataCW * 8;
+        for (let i = 0; i < 4 && bits.length < maxBits; i++) bits.push(0);
+        // Pad to byte boundary
+        while (bits.length % 8 !== 0 && bits.length < maxBits) bits.push(0);
+        // Pad bytes
+        let padBytes = [0xEC, 0x11];
+        let padIdx = 0;
+        while (bits.length < maxBits) {
+          let pb = padBytes[padIdx % 2];
+          for (let i = 7; i >= 0; i--) bits.push((pb >> i) & 1);
+          padIdx++;
+        }
+
+        // Convert to bytes
+        let codewords = new Uint8Array(v.dataCW);
+        for (let i = 0; i < v.dataCW; i++) {
+          let val = 0;
+          for (let j = 0; j < 8; j++) val = (val << 1) | (bits[i * 8 + j] || 0);
+          codewords[i] = val;
+        }
+
+        // RS encode
+        let ec = rsEncode(codewords, v.ecCW);
+        let full = new Uint8Array(v.totalCW);
+        full.set(codewords);
+        full.set(ec, v.dataCW);
+        return full;
+      }
+
+      function createMatrix(version) {
+        const v = VERSIONS[version];
+        const size = v.size;
+        // 0 = white, 1 = black, -1 = unset, 2 = reserved
+        let matrix = Array.from({length: size}, () => new Int8Array(size).fill(-1));
+        let reserved = Array.from({length: size}, () => new Uint8Array(size));
+
+        // Finder patterns
+        function drawFinder(row, col) {
+          for (let r = -1; r <= 7; r++) {
+            for (let c = -1; c <= 7; c++) {
+              let rr = row + r, cc = col + c;
+              if (rr < 0 || rr >= size || cc < 0 || cc >= size) continue;
+              if ((r >= 0 && r <= 6 && (c === 0 || c === 6)) ||
+                  (c >= 0 && c <= 6 && (r === 0 || r === 6)) ||
+                  (r >= 2 && r <= 4 && c >= 2 && c <= 4)) {
+                matrix[rr][cc] = 1;
+              } else {
+                matrix[rr][cc] = 0;
+              }
+              reserved[rr][cc] = 1;
+            }
+          }
+        }
+        drawFinder(0, 0);
+        drawFinder(0, size - 7);
+        drawFinder(size - 7, 0);
+
+        // Alignment patterns
+        if (version >= 2) {
+          const pos = ALIGN_POS[version];
+          for (let r of pos) {
+            for (let c of pos) {
+              if (reserved[r][c]) continue;
+              for (let dr = -2; dr <= 2; dr++) {
+                for (let dc = -2; dc <= 2; dc++) {
+                  if (Math.abs(dr) === 2 || Math.abs(dc) === 2 || (dr === 0 && dc === 0)) {
+                    matrix[r+dr][c+dc] = 1;
+                  } else {
+                    matrix[r+dr][c+dc] = 0;
+                  }
+                  reserved[r+dr][c+dc] = 1;
+                }
+              }
+            }
+          }
+        }
+
+        // Timing patterns
+        for (let i = 8; i < size - 8; i++) {
+          if (!reserved[6][i]) {
+            matrix[6][i] = i % 2 === 0 ? 1 : 0;
+            reserved[6][i] = 1;
+          }
+          if (!reserved[i][6]) {
+            matrix[i][6] = i % 2 === 0 ? 1 : 0;
+            reserved[i][6] = 1;
+          }
+        }
+
+        // Dark module
+        matrix[size - 8][8] = 1;
+        reserved[size - 8][8] = 1;
+
+        // Reserve format info areas
+        for (let i = 0; i < 15; i++) {
+          // Around top-left finder
+          if (i < 6) { reserved[8][i] = 1; reserved[i][8] = 1; }
+          else if (i < 8) { reserved[8][i + 1] = 1; reserved[i + 1][8] = 1; }
+          else if (i === 8) { reserved[8][7] = 1; reserved[8][8] = 1; reserved[7][8] = 1; }
+          else { reserved[8][size - 15 + i] = 1; reserved[size - 15 + i][8] = 1; }
+        }
+        reserved[8][size - 8] = 1; // dark module already set
+
+        return { matrix, reserved, size };
+      }
+
+      function placeData(matrixInfo, data) {
+        const { matrix, reserved, size } = matrixInfo;
+        let bitIdx = 0;
+        let totalBits = data.length * 8;
+
+        // Zigzag pattern
+        let upward = true;
+        for (let col = size - 1; col >= 0; col -= 2) {
+          if (col === 6) col = 5; // Skip timing column
+          for (let row = 0; row < size; row++) {
+            let actualRow = upward ? (size - 1 - row) : row;
+            for (let dc = 0; dc >= -1; dc--) {
+              let c = col + dc;
+              if (c < 0 || c >= size) continue;
+              if (reserved[actualRow][c]) continue;
+              if (bitIdx < totalBits) {
+                let byteIdx = Math.floor(bitIdx / 8);
+                let bitPos = 7 - (bitIdx % 8);
+                matrix[actualRow][c] = (data[byteIdx] >> bitPos) & 1;
+                bitIdx++;
+              } else {
+                matrix[actualRow][c] = 0;
+              }
+            }
+          }
+          upward = !upward;
+        }
+      }
+
+      // Mask patterns
+      const MASKS = [
+        (r,c) => (r + c) % 2 === 0,
+        (r,c) => r % 2 === 0,
+        (r,c) => c % 3 === 0,
+        (r,c) => (r + c) % 3 === 0,
+        (r,c) => (Math.floor(r/2) + Math.floor(c/3)) % 2 === 0,
+        (r,c) => ((r*c)%2 + (r*c)%3) === 0,
+        (r,c) => ((r*c)%2 + (r*c)%3) % 2 === 0,
+        (r,c) => ((r+c)%2 + (r*c)%3) % 2 === 0,
+      ];
+
+      // Format info for ECC Level L (01)
+      const FORMAT_BITS = [
+        0x77c4, 0x72f3, 0x7daa, 0x789d, 0x662f, 0x6318, 0x6c41, 0x6976,
+        0x5412, 0x5125, 0x5e7c, 0x5b4b, 0x45f9, 0x40ce, 0x4f97, 0x4aa0
+      ];
+
+      function applyMask(matrixInfo, maskIdx) {
+        const { matrix, reserved, size } = matrixInfo;
+        let result = matrix.map(row => Int8Array.from(row));
+        const mask = MASKS[maskIdx];
+
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (reserved[r][c]) continue;
+            if (mask(r, c)) result[r][c] ^= 1;
+          }
+        }
+        return result;
+      }
+
+      function placeFormatInfo(matrix, size, maskIdx) {
+        let format = FORMAT_BITS[2 * 8 + maskIdx]; // ECC level L = 01 -> index 16+maskIdx
+        // Actually for level L (01), the format index is (01 << 3) | maskIdx = 8 + maskIdx
+        format = FORMAT_BITS[8 + maskIdx];
+
+        // Place around top-left
+        let bits = [];
+        for (let i = 14; i >= 0; i--) bits.push((format >> i) & 1);
+
+        // Horizontal (top-left, right of finder)
+        const hPos = [0,1,2,3,4,5,7,8,size-8,size-7,size-6,size-5,size-4,size-3,size-2];
+        for (let i = 0; i < 15; i++) matrix[8][hPos[i]] = bits[i];
+
+        // Vertical (top-left, below finder)
+        const vPos = [size-1,size-2,size-3,size-4,size-5,size-6,size-7,8,7,5,4,3,2,1,0];
+        for (let i = 0; i < 15; i++) matrix[vPos[i]][8] = bits[i];
+      }
+
+      function penalty(matrix, size) {
+        let score = 0;
+        // Rule 1: consecutive same-color modules in row/col
+        for (let r = 0; r < size; r++) {
+          let count = 1;
+          for (let c = 1; c < size; c++) {
+            if (matrix[r][c] === matrix[r][c-1]) { count++; }
+            else { if (count >= 5) score += count - 2; count = 1; }
+          }
+          if (count >= 5) score += count - 2;
+        }
+        for (let c = 0; c < size; c++) {
+          let count = 1;
+          for (let r = 1; r < size; r++) {
+            if (matrix[r][c] === matrix[r-1][c]) { count++; }
+            else { if (count >= 5) score += count - 2; count = 1; }
+          }
+          if (count >= 5) score += count - 2;
+        }
+        return score;
+      }
+
+      function generate(text) {
+        let version = getVersion(new TextEncoder().encode(text).length);
+        if (version < 0) return null;
+
+        const data = encodeData(text, version);
+        const matrixInfo = createMatrix(version);
+        placeData(matrixInfo, data);
+
+        // Try all masks and pick best
+        let bestMask = 0, bestPenalty = Infinity;
+        for (let m = 0; m < 8; m++) {
+          let masked = applyMask(matrixInfo, m);
+          let p = penalty(masked, matrixInfo.size);
+          if (p < bestPenalty) { bestPenalty = p; bestMask = m; }
+        }
+
+        let final = applyMask(matrixInfo, bestMask);
+        placeFormatInfo(final, matrixInfo.size, bestMask);
+
+        return { matrix: final, size: matrixInfo.size };
+      }
+
+      return { generate };
+    })();
+
+    function generateQR() {
+      const text = document.getElementById('qrText').value || 'https://github.com';
+      const size = parseInt(document.getElementById('qrSize').value);
+      const fgColor = document.getElementById('fgColor').value;
+      const bgColor = document.getElementById('bgColor').value;
+
+      const qr = QR.generate(text);
+      if (!qr) {
+        showToast('文本过长，请缩短内容');
+        return;
+      }
+
+      const canvas = document.getElementById('qrCanvas');
+      const scale = Math.floor(size / qr.size);
+      canvas.width = qr.size * scale;
+      canvas.height = qr.size * scale;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = fgColor;
+
+      for (let r = 0; r < qr.size; r++) {
+        for (let c = 0; c < qr.size; c++) {
+          if (qr.matrix[r][c]) {
+            ctx.fillRect(c * scale, r * scale, scale, scale);
+          }
+        }
+      }
+    }
+
+    function downloadQR() {
+      const canvas = document.getElementById('qrCanvas');
+      const link = document.createElement('a');
+      link.download = 'qrcode.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    generateQR();
+  </script>
+</body>
+</html>

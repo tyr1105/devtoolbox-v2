@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JWT 解码器 - DevToolBox</title>
+  <meta name="description" content="在线解码JWT令牌，查看Header、Payload、Signature，显示过期状态">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .editor-area { width: 100%; min-height: 100px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; resize: vertical; box-sizing: border-box; }
+    .editor-area:focus { outline: none; border-color: var(--accent); }
+    .section-card { background: var(--bg); border-radius: 12px; overflow: hidden; margin-bottom: 16px; border: 1px solid var(--border); }
+    .section-header { padding: 12px 16px; font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .section-header.red { background: rgba(248,113,113,0.15); color: #f87171; }
+    .section-header.purple { background: rgba(167,139,250,0.15); color: #a78bfa; }
+    .section-header.green { background: rgba(52,211,153,0.15); color: #34d399; }
+    .section-body { padding: 12px 16px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; color: var(--text); max-height: 300px; overflow: auto; }
+    .exp-status { padding: 12px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; margin-bottom: 16px; display: none; }
+    .exp-status.valid { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3); color: #34d399; display: block; }
+    .exp-status.expired { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: #f87171; display: block; }
+    .exp-status.no-exp { background: rgba(148,163,184,0.1); border: 1px solid rgba(148,163,184,0.3); color: #94a3b8; display: block; }
+    .decoded-label { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+    .decoded-label.red { background: rgba(248,113,113,0.2); color: #f87171; }
+    .decoded-label.purple { background: rgba(167,139,250,0.2); color: #a78bfa; }
+    .decoded-label.green { background: rgba(52,211,153,0.2); color: #34d399; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🎫 JWT 解码器</h1>
+        <p>解码 JWT 令牌，查看 Header、Payload、Signature，检测过期状态</p>
+      </div>
+
+      <div class="label">输入 JWT Token</div>
+      <textarea class="editor-area" id="jwtInput" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c" oninput="decodeJWT()"></textarea>
+
+      <div class="exp-status" id="expStatus"></div>
+
+      <div id="decodedSections">
+        <div class="section-card">
+          <div class="section-header red">
+            <span>HEADER</span>
+            <span class="decoded-label red">解密</span>
+          </div>
+          <div class="section-body" id="headerOutput" style="color: #f87171;">在此显示 Header...</div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-header purple">
+            <span>PAYLOAD</span>
+            <span class="decoded-label purple">解密</span>
+          </div>
+          <div class="section-body" id="payloadOutput" style="color: #a78bfa;">在此显示 Payload...</div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-header green">
+            <span>SIGNATURE</span>
+            <span class="decoded-label green">签名</span>
+          </div>
+          <div class="section-body" id="signatureOutput" style="color: #34d399;">在此显示 Signature...</div>
+        </div>
+      </div>
+
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="btn btn-secondary" onclick="copySection('header')">复制 Header</button>
+        <button class="btn btn-secondary" onclick="copySection('payload')">复制 Payload</button>
+        <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    function base64UrlDecode(str) {
+      // Replace URL-safe chars and add padding
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4 !== 0) str += '=';
+      return atob(str);
+    }
+
+    function formatJSON(str) {
+      try {
+        return JSON.stringify(JSON.parse(str), null, 2);
+      } catch {
+        return str;
+      }
+    }
+
+    let decodedData = { header: '', payload: '', signature: '' };
+
+    function decodeJWT() {
+      const input = document.getElementById('jwtInput').value.trim();
+      const headerEl = document.getElementById('headerOutput');
+      const payloadEl = document.getElementById('payloadOutput');
+      const sigEl = document.getElementById('signatureOutput');
+      const expEl = document.getElementById('expStatus');
+
+      if (!input) {
+        headerEl.textContent = '在此显示 Header...';
+        payloadEl.textContent = '在此显示 Payload...';
+        sigEl.textContent = '在此显示 Signature...';
+        expEl.className = 'exp-status';
+        expEl.style.display = 'none';
+        decodedData = { header: '', payload: '', signature: '' };
+        return;
+      }
+
+      const parts = input.split('.');
+      if (parts.length !== 3) {
+        headerEl.textContent = '❌ 无效的 JWT 格式（需要三段以 . 分隔）';
+        payloadEl.textContent = '';
+        sigEl.textContent = '';
+        expEl.className = 'exp-status';
+        return;
+      }
+
+      try {
+        const header = base64UrlDecode(parts[0]);
+        const formattedHeader = formatJSON(header);
+        headerEl.textContent = formattedHeader;
+        decodedData.header = formattedHeader;
+      } catch (e) {
+        headerEl.textContent = '❌ Header 解码失败';
+        decodedData.header = '';
+      }
+
+      try {
+        const payload = base64UrlDecode(parts[1]);
+        const formattedPayload = formatJSON(payload);
+        payloadEl.textContent = formattedPayload;
+        decodedData.payload = formattedPayload;
+
+        // Check expiration
+        try {
+          const payloadObj = JSON.parse(payload);
+          if (payloadObj.exp) {
+            const expDate = new Date(payloadObj.exp * 1000);
+            const now = Date.now();
+            const diff = payloadObj.exp * 1000 - now;
+            if (diff > 0) {
+              const days = Math.floor(diff / 86400000);
+              const hours = Math.floor((diff % 86400000) / 3600000);
+              const mins = Math.floor((diff % 3600000) / 60000);
+              let countdown = '';
+              if (days > 0) countdown += days + '天 ';
+              if (hours > 0) countdown += hours + '小时 ';
+              countdown += mins + '分钟';
+              expEl.className = 'exp-status valid';
+              expEl.textContent = `✅ 令牌有效 — 将在 ${countdown} 后过期（${expDate.toLocaleString('zh-CN')}）`;
+            } else {
+              const ago = Math.abs(diff);
+              const days = Math.floor(ago / 86400000);
+              const hours = Math.floor((ago % 86400000) / 3600000);
+              expEl.className = 'exp-status expired';
+              let agoStr = '';
+              if (days > 0) agoStr += days + '天 ';
+              agoStr += hours + '小时';
+              expEl.textContent = `❌ 令牌已过期 — ${agoStr}前过期（${expDate.toLocaleString('zh-CN')}）`;
+            }
+          } else {
+            expEl.className = 'exp-status no-exp';
+            expEl.textContent = 'ℹ️ 令牌未设置过期时间（exp）';
+          }
+        } catch {
+          expEl.className = 'exp-status';
+        }
+      } catch (e) {
+        payloadEl.textContent = '❌ Payload 解码失败';
+        decodedData.payload = '';
+        expEl.className = 'exp-status';
+      }
+
+      sigEl.textContent = parts[2];
+      decodedData.signature = parts[2];
+    }
+
+    function copySection(section) {
+      const data = decodedData[section];
+      if (!data) { showToast('没有内容可复制'); return; }
+      navigator.clipboard.writeText(data).then(() => showToast('已复制 ' + section));
+    }
+
+    function clearAll() {
+      document.getElementById('jwtInput').value = '';
+      decodeJWT();
+    }
+  </script>
+</body>
+</html>

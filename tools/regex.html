@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>正则表达式测试 - DevToolBox</title>
+  <meta name="description" content="在线正则表达式测试工具，支持匹配高亮、分组显示和常用模板">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .editor-area { width: 100%; min-height: 150px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; resize: vertical; box-sizing: border-box; }
+    .editor-area:focus { outline: none; border-color: var(--accent); }
+    .input-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+    .input-row input[type="text"] { flex: 1; min-width: 200px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; box-sizing: border-box; }
+    .input-row input[type="text"]:focus { outline: none; border-color: var(--accent); }
+    .flags-group { display: flex; gap: 12px; align-items: center; }
+    .flags-group label { display: flex; align-items: center; gap: 4px; color: var(--text2); font-size: 14px; cursor: pointer; }
+    .flags-group input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .highlight-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; min-height: 100px; color: var(--text); }
+    .highlight-box mark { background: rgba(56,189,248,0.3); color: var(--text); border-radius: 2px; padding: 1px 0; }
+    .info-bar { display: flex; gap: 20px; margin: 12px 0; color: var(--text2); font-size: 14px; flex-wrap: wrap; }
+    .info-bar span strong { color: var(--accent); }
+    .groups-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 12px; }
+    .groups-box table { width: 100%; border-collapse: collapse; }
+    .groups-box th, .groups-box td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text2); }
+    .groups-box th { color: var(--text); font-weight: 600; }
+    .templates { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .templates button { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+    .templates button:hover { border-color: var(--accent); color: var(--accent); }
+    .error-msg { color: #f87171; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); border-radius: 8px; padding: 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🔍 正则表达式测试</h1>
+        <p>在线测试正则表达式，实时高亮匹配结果，支持分组查看和常用模板</p>
+      </div>
+
+      <div class="label">常用模板</div>
+      <div class="templates">
+        <button onclick="useTemplate('email')">📧 邮箱</button>
+        <button onclick="useTemplate('url')">🌐 URL</button>
+        <button onclick="useTemplate('phone')">📱 手机号</button>
+        <button onclick="useTemplate('ip')">🖥️ IP地址</button>
+        <button onclick="useTemplate('date')">📅 日期</button>
+      </div>
+
+      <div class="label">正则表达式</div>
+      <div class="input-row">
+        <span style="color:var(--text2);">/</span>
+        <input type="text" id="regexInput" placeholder="输入正则表达式..." oninput="testRegex()">
+        <span style="color:var(--text2);">/</span>
+        <div class="flags-group">
+          <label><input type="checkbox" id="flagG" checked onchange="testRegex()"> g</label>
+          <label><input type="checkbox" id="flagI" onchange="testRegex()"> i</label>
+          <label><input type="checkbox" id="flagM" onchange="testRegex()"> m</label>
+        </div>
+      </div>
+
+      <div class="label">测试文本</div>
+      <textarea class="editor-area" id="testString" placeholder="输入测试文本..." oninput="testRegex()"></textarea>
+
+      <div id="errorMsg"></div>
+
+      <div class="info-bar" id="infoBar">
+        <span>匹配数：<strong id="matchCount">0</strong></span>
+      </div>
+
+      <div class="label">匹配结果</div>
+      <div class="highlight-box" id="highlightOutput">匹配结果将显示在这里...</div>
+
+      <div id="groupsContainer"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    const templates = {
+      email: { pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}', flags: 'gi' },
+      url: { pattern: 'https?://[\\w\\-]+(\\.[\\w\\-]+)+[\\w\\-.,@?^=%&:/~+#]*', flags: 'gi' },
+      phone: { pattern: '1[3-9]\\d{9}', flags: 'g' },
+      ip: { pattern: '\\b(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\b', flags: 'g' },
+      date: { pattern: '\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}', flags: 'g' }
+    };
+
+    function useTemplate(name) {
+      const tpl = templates[name];
+      document.getElementById('regexInput').value = tpl.pattern;
+      document.getElementById('flagG').checked = tpl.flags.includes('g');
+      document.getElementById('flagI').checked = tpl.flags.includes('i');
+      document.getElementById('flagM').checked = tpl.flags.includes('m');
+      testRegex();
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function testRegex() {
+      const pattern = document.getElementById('regexInput').value;
+      const testStr = document.getElementById('testString').value;
+      const errorEl = document.getElementById('errorMsg');
+      const output = document.getElementById('highlightOutput');
+      const countEl = document.getElementById('matchCount');
+      const groupsContainer = document.getElementById('groupsContainer');
+      errorEl.innerHTML = '';
+      groupsContainer.innerHTML = '';
+
+      if (!pattern || !testStr) {
+        output.innerHTML = escapeHtml(testStr) || '匹配结果将显示在这里...';
+        countEl.textContent = '0';
+        return;
+      }
+
+      let flags = '';
+      if (document.getElementById('flagG').checked) flags += 'g';
+      if (document.getElementById('flagI').checked) flags += 'i';
+      if (document.getElementById('flagM').checked) flags += 'm';
+
+      try {
+        const regex = new RegExp(pattern, flags);
+        const matches = [];
+        let match;
+
+        if (flags.includes('g')) {
+          while ((match = regex.exec(testStr)) !== null) {
+            matches.push({ value: match[0], index: match.index, groups: match.slice(1) });
+            if (match[0].length === 0) regex.lastIndex++;
+          }
+        } else {
+          match = regex.exec(testStr);
+          if (match) {
+            matches.push({ value: match[0], index: match.index, groups: match.slice(1) });
+          }
+        }
+
+        countEl.textContent = matches.length;
+
+        // Build highlighted output
+        let html = '';
+        let lastIndex = 0;
+        for (const m of matches) {
+          html += escapeHtml(testStr.substring(lastIndex, m.index));
+          html += '<mark>' + escapeHtml(m.value) + '</mark>';
+          lastIndex = m.index + m.value.length;
+        }
+        html += escapeHtml(testStr.substring(lastIndex));
+        output.innerHTML = html;
+
+        // Show groups if any
+        const hasGroups = matches.some(m => m.groups.length > 0);
+        if (hasGroups) {
+          let tableHtml = '<div class="groups-box"><div class="label">捕获分组</div><table><tr><th>匹配</th><th>分组</th></tr>';
+          matches.forEach((m, i) => {
+            tableHtml += `<tr><td>${escapeHtml(m.value)}</td><td>`;
+            m.groups.forEach((g, gi) => {
+              tableHtml += `<span style="color:var(--accent2);">$${gi+1}:</span> ${g ? escapeHtml(g) : '<em style="color:var(--text2);">undefined</em>'} `;
+            });
+            tableHtml += '</td></tr>';
+          });
+          tableHtml += '</table></div>';
+          groupsContainer.innerHTML = tableHtml;
+        }
+      } catch (e) {
+        errorEl.innerHTML = `<div class="error-msg" style="margin-top:12px;">❌ 正则表达式错误：${e.message}</div>`;
+        output.innerHTML = escapeHtml(testStr);
+        countEl.textContent = '0';
+      }
+    }
+  </script>
+</body>
+</html>

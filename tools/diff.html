@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文本对比 - DevToolBox</title>
+  <meta name="description" content="在线文本对比工具，逐行对比差异，高亮显示新增、删除和修改">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .diff-inputs { display: flex; gap: 16px; margin-bottom: 16px; }
+    .diff-inputs > div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+    .diff-inputs textarea {
+      flex: 1; min-height: 200px; background: #1e1e2e; border: 1px solid #3a3a5e; color: #e0e0e0;
+      padding: 12px; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 13px; resize: vertical; line-height: 1.6;
+    }
+    .diff-stats { display: flex; gap: 16px; margin-bottom: 12px; font-size: 13px; }
+    .stat-add { color: #4f4; }
+    .stat-del { color: #f66; }
+    .stat-mod { color: #ff0; }
+    .diff-output { font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.8; background: #1a1a2e; border: 1px solid #3a3a5e; border-radius: 8px; overflow-x: auto; }
+    .diff-line { display: flex; padding: 0 12px; }
+    .diff-line.add { background: rgba(0,255,0,0.1); color: #4f4; }
+    .diff-line.del { background: rgba(255,0,0,0.1); color: #f66; }
+    .diff-line.mod { background: rgba(255,255,0,0.1); color: #ff0; }
+    .diff-line .ln { width: 40px; color: #666; flex-shrink: 0; text-align: right; padding-right: 12px; user-select: none; }
+    .diff-line .prefix { width: 20px; flex-shrink: 0; }
+    .diff-line .text { flex: 1; white-space: pre-wrap; word-break: break-all; }
+    @media (max-width: 768px) { .diff-inputs { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🔍 文本对比</h1>
+        <p>逐行对比两段文本，高亮显示新增、删除和修改的行</p>
+      </div>
+      <div class="diff-inputs">
+        <div>
+          <span class="label">原始文本</span>
+          <textarea id="textA" placeholder="输入原始文本..."></textarea>
+        </div>
+        <div>
+          <span class="label">修改文本</span>
+          <textarea id="textB" placeholder="输入修改后的文本..."></textarea>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <button class="btn btn-primary" onclick="doDiff()">对比</button>
+        <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+      </div>
+      <div class="diff-stats" id="stats" style="display:none;">
+        <span class="stat-add" id="statAdd">+ 0 新增</span>
+        <span class="stat-del" id="statDel">- 0 删除</span>
+        <span class="stat-mod" id="statMod">~ 0 修改</span>
+      </div>
+      <div class="diff-output" id="diffOutput"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // Simple LCS-based diff
+    function lcs(a, b) {
+      const m = a.length, n = b.length;
+      const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0));
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          if (a[i-1] === b[j-1]) dp[i][j] = dp[i-1][j-1] + 1;
+          else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+        }
+      }
+      // Backtrack
+      let ops = [];
+      let i = m, j = n;
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+          ops.unshift({type: 'eq', aIdx: i-1, bIdx: j-1});
+          i--; j--;
+        } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+          ops.unshift({type: 'add', bIdx: j-1});
+          j--;
+        } else {
+          ops.unshift({type: 'del', aIdx: i-1});
+          i--;
+        }
+      }
+      return ops;
+    }
+
+    function doDiff() {
+      const a = document.getElementById('textA').value.split('\n');
+      const b = document.getElementById('textB').value.split('\n');
+      const ops = lcs(a, b);
+
+      let html = '';
+      let addCount = 0, delCount = 0, modCount = 0;
+
+      // Group adjacent del+add as modifications
+      let grouped = [];
+      let i = 0;
+      while (i < ops.length) {
+        if (ops[i].type === 'del') {
+          let dels = [];
+          while (i < ops.length && ops[i].type === 'del') { dels.push(ops[i]); i++; }
+          let adds = [];
+          while (i < ops.length && ops[i].type === 'add') { adds.push(ops[i]); i++; }
+          if (adds.length > 0) {
+            // Paired as modification
+            const pairs = Math.max(dels.length, adds.length);
+            for (let k = 0; k < pairs; k++) {
+              grouped.push({
+                type: 'mod',
+                delLine: k < dels.length ? a[dels[k].aIdx] : null,
+                addLine: k < adds.length ? b[adds[k].bIdx] : null
+              });
+            }
+          } else {
+            dels.forEach(d => grouped.push({type: 'del', line: a[d.aIdx]}));
+          }
+        } else if (ops[i].type === 'add') {
+          grouped.push({type: 'add', line: b[ops[i].bIdx]});
+          i++;
+        } else {
+          grouped.push({type: 'eq', line: a[ops[i].aIdx]});
+          i++;
+        }
+      }
+
+      let lineNum = 0;
+      grouped.forEach(g => {
+        lineNum++;
+        if (g.type === 'eq') {
+          html += `<div class="diff-line"><span class="ln">${lineNum}</span><span class="prefix"> </span><span class="text">${esc(g.line)}</span></div>`;
+        } else if (g.type === 'add') {
+          addCount++;
+          html += `<div class="diff-line add"><span class="ln">${lineNum}</span><span class="prefix">+</span><span class="text">${esc(g.line)}</span></div>`;
+        } else if (g.type === 'del') {
+          delCount++;
+          html += `<div class="diff-line del"><span class="ln">${lineNum}</span><span class="prefix">-</span><span class="text">${esc(g.line)}</span></div>`;
+        } else if (g.type === 'mod') {
+          modCount++;
+          if (g.delLine !== null) {
+            html += `<div class="diff-line del"><span class="ln">${lineNum}</span><span class="prefix">-</span><span class="text">${esc(g.delLine)}</span></div>`;
+          }
+          if (g.addLine !== null) {
+            addCount++;
+            lineNum++;
+            html += `<div class="diff-line add"><span class="ln">${lineNum}</span><span class="prefix">+</span><span class="text">${esc(g.addLine)}</span></div>`;
+          }
+          delCount += g.delLine !== null ? 1 : 0;
+          addCount--;
+          // Adjust: mod counted as 1 mod
+        }
+      });
+
+      document.getElementById('diffOutput').innerHTML = html || '<div style="padding:20px;color:#888;text-align:center;">两段文本完全相同</div>';
+      document.getElementById('stats').style.display = 'flex';
+      document.getElementById('statAdd').textContent = '+ ' + addCount + ' 新增';
+      document.getElementById('statDel').textContent = '- ' + delCount + ' 删除';
+      document.getElementById('statMod').textContent = '~ ' + modCount + ' 修改';
+    }
+
+    function clearAll() {
+      document.getElementById('textA').value = '';
+      document.getElementById('textB').value = '';
+      document.getElementById('diffOutput').innerHTML = '';
+      document.getElementById('stats').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

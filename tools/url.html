@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URL 编码/解码 - DevToolBox</title>
+  <meta name="description" content="在线URL编码解码和参数解析工具">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .editor-area { width: 100%; min-height: 180px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; resize: vertical; box-sizing: border-box; }
+    .editor-area:focus { outline: none; border-color: var(--accent); }
+    .output-pre { width: 100%; min-height: 180px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; overflow: auto; white-space: pre-wrap; word-break: break-all; box-sizing: border-box; }
+    .params-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .params-table th, .params-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .params-table th { color: var(--accent); font-weight: 600; background: var(--bg); }
+    .params-table td { color: var(--text2); }
+    .params-table td:first-child { color: var(--green); font-family: 'Consolas', monospace; }
+    .params-table td:last-child { font-family: 'Consolas', monospace; word-break: break-all; }
+    .params-container { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0; overflow: hidden; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🔗 URL 编码/解码</h1>
+        <p>URL 编码、解码和参数解析，将 URL 参数解析为可读的键值对表格</p>
+      </div>
+
+      <div class="label">输入文本</div>
+      <textarea class="editor-area" id="input" placeholder="输入 URL 或文本，例如：https://example.com?name=张三&age=25"></textarea>
+
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="encode()">URL 编码</button>
+        <button class="btn btn-primary" onclick="decode()">URL 解码</button>
+        <button class="btn btn-secondary" onclick="parseParams()">解析参数</button>
+        <button class="btn btn-secondary" onclick="copyOutput()">复制结果</button>
+        <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+      </div>
+
+      <div class="label" style="margin-top:16px;">输出结果</div>
+      <pre class="output-pre" id="output"></pre>
+
+      <div id="paramsArea"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    function encode() {
+      const input = document.getElementById('input').value;
+      if (!input) { showToast('请输入文本'); return; }
+      document.getElementById('output').textContent = encodeURIComponent(input);
+      document.getElementById('paramsArea').innerHTML = '';
+    }
+
+    function decode() {
+      const input = document.getElementById('input').value.trim();
+      if (!input) { showToast('请输入文本'); return; }
+      try {
+        document.getElementById('output').textContent = decodeURIComponent(input);
+      } catch (e) {
+        document.getElementById('output').textContent = '❌ 解码失败：输入不是有效的编码字符串';
+      }
+      document.getElementById('paramsArea').innerHTML = '';
+    }
+
+    function parseParams() {
+      const input = document.getElementById('input').value.trim();
+      if (!input) { showToast('请输入 URL'); return; }
+      document.getElementById('output').textContent = '';
+
+      let url = input;
+      // Try to extract query string
+      const qIndex = url.indexOf('?');
+      if (qIndex === -1) {
+        document.getElementById('paramsArea').innerHTML = '<div style="color:var(--text2);padding:12px;">未找到查询参数（缺少 ? 符号）</div>';
+        return;
+      }
+
+      const query = url.substring(qIndex + 1);
+      const hashIndex = query.indexOf('#');
+      const queryString = hashIndex >= 0 ? query.substring(0, hashIndex) : query;
+
+      if (!queryString) {
+        document.getElementById('paramsArea').innerHTML = '<div style="color:var(--text2);padding:12px;">查询参数为空</div>';
+        return;
+      }
+
+      const params = new URLSearchParams(queryString);
+      let html = '<div class="params-container"><table class="params-table"><tr><th>参数名</th><th>值</th></tr>';
+      let count = 0;
+      params.forEach((value, key) => {
+        html += `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(value)}</td></tr>`;
+        count++;
+      });
+      html += '</table></div>';
+      html += `<div style="color:var(--text2);font-size:13px;margin-top:8px;">共 ${count} 个参数</div>`;
+      document.getElementById('paramsArea').innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function copyOutput() {
+      const text = document.getElementById('output').textContent;
+      if (!text) { showToast('没有内容可复制'); return; }
+      navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
+    }
+
+    function clearAll() {
+      document.getElementById('input').value = '';
+      document.getElementById('output').textContent = '';
+      document.getElementById('paramsArea').innerHTML = '';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Base64 编码/解码 - DevToolBox</title>
+  <meta name="description" content="在线Base64编码和解码工具，支持URL安全模式">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .editor-area { width: 100%; min-height: 200px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; resize: vertical; box-sizing: border-box; }
+    .editor-area:focus { outline: none; border-color: var(--accent); }
+    .output-pre { width: 100%; min-height: 200px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; overflow: auto; white-space: pre-wrap; word-break: break-all; box-sizing: border-box; }
+    .toggle-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+    .toggle-row label { color: var(--text2); font-size: 14px; cursor: pointer; }
+    .toggle-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+    .error-msg { color: #f87171; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🔐 Base64 编码/解码</h1>
+        <p>对文本进行 Base64 编码和解码，支持 URL 安全模式</p>
+      </div>
+
+      <div class="label">输入文本</div>
+      <textarea class="editor-area" id="input" placeholder="输入要编码或解码的文本..."></textarea>
+
+      <div class="toggle-row">
+        <input type="checkbox" id="urlSafe">
+        <label for="urlSafe">URL 安全模式（使用 - 和 _ 替换 + 和 /）</label>
+      </div>
+
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="encode()">编码（Encode）</button>
+        <button class="btn btn-primary" onclick="decode()">解码（Decode）</button>
+        <button class="btn btn-secondary" onclick="copyOutput()">复制结果</button>
+        <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+      </div>
+
+      <div id="statusMsg"></div>
+
+      <div class="label" style="margin-top:16px;">输出结果</div>
+      <pre class="output-pre" id="output"></pre>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    function isUrlSafe() {
+      return document.getElementById('urlSafe').checked;
+    }
+
+    function encode() {
+      const input = document.getElementById('input').value;
+      const status = document.getElementById('statusMsg');
+      status.innerHTML = '';
+      if (!input) { showToast('请输入文本'); return; }
+      try {
+        let encoded = btoa(unescape(encodeURIComponent(input)));
+        if (isUrlSafe()) {
+          encoded = encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+        document.getElementById('output').textContent = encoded;
+        status.innerHTML = '<div class="success" style="margin-top:8px;">✅ 编码成功</div>';
+      } catch (e) {
+        status.innerHTML = `<div class="error-msg">❌ 编码失败：${e.message}</div>`;
+      }
+    }
+
+    function decode() {
+      const input = document.getElementById('input').value.trim();
+      const status = document.getElementById('statusMsg');
+      status.innerHTML = '';
+      if (!input) { showToast('请输入文本'); return; }
+      try {
+        let str = input;
+        if (isUrlSafe()) {
+          str = str.replace(/-/g, '+').replace(/_/g, '/');
+          while (str.length % 4 !== 0) str += '=';
+        }
+        const decoded = decodeURIComponent(escape(atob(str)));
+        document.getElementById('output').textContent = decoded;
+        status.innerHTML = '<div class="success" style="margin-top:8px;">✅ 解码成功</div>';
+      } catch (e) {
+        status.innerHTML = `<div class="error-msg">❌ 解码失败：输入不是有效的 Base64 字符串</div>`;
+      }
+    }
+
+    function copyOutput() {
+      const text = document.getElementById('output').textContent;
+      if (!text) { showToast('没有内容可复制'); return; }
+      navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
+    }
+
+    function clearAll() {
+      document.getElementById('input').value = '';
+      document.getElementById('output').textContent = '';
+      document.getElementById('statusMsg').innerHTML = '';
+    }
+  </script>
+</body>
+</html>

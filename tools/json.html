@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON 格式化/验证 - DevToolBox</title>
+  <meta name="description" content="在线JSON格式化、压缩和验证工具，支持错误定位和行号显示">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .editor-area { width: 100%; min-height: 250px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; resize: vertical; box-sizing: border-box; }
+    .editor-area:focus { outline: none; border-color: var(--accent); }
+    .output-pre { width: 100%; min-height: 250px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; overflow: auto; white-space: pre-wrap; word-break: break-all; box-sizing: border-box; }
+    .error-msg { color: #f87171; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); border-radius: 8px; padding: 12px; margin-top: 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; }
+    .success-msg { color: var(--green); margin-top: 8px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>📋 JSON 格式化/验证</h1>
+        <p>格式化、压缩和验证 JSON 数据，支持错误定位和行号显示</p>
+      </div>
+
+      <div class="label">输入 JSON</div>
+      <textarea class="editor-area" id="jsonInput" placeholder='{"key": "value"}'></textarea>
+
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="formatJSON()">格式化</button>
+        <button class="btn btn-secondary" onclick="minifyJSON()">压缩</button>
+        <button class="btn btn-secondary" onclick="validateJSON()">验证</button>
+        <button class="btn btn-secondary" onclick="copyOutput()">复制结果</button>
+        <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+      </div>
+
+      <div id="statusMsg"></div>
+
+      <div class="label" style="margin-top:16px;">输出结果</div>
+      <pre class="output-pre" id="jsonOutput"></pre>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    function formatJSON() {
+      const input = document.getElementById('jsonInput').value.trim();
+      const output = document.getElementById('jsonOutput');
+      const status = document.getElementById('statusMsg');
+      status.innerHTML = '';
+      if (!input) { status.innerHTML = '<div class="error-msg">请输入 JSON 数据</div>'; return; }
+      try {
+        const parsed = JSON.parse(input);
+        output.textContent = JSON.stringify(parsed, null, 2);
+        status.innerHTML = '<div class="success-msg">✅ 格式化成功</div>';
+      } catch (e) {
+        const info = extractErrorInfo(e.message, input);
+        status.innerHTML = `<div class="error-msg">❌ JSON 格式错误<br>错误：${info.msg}<br>位置：第 ${info.line} 行，第 ${info.col} 列</div>`;
+        output.textContent = '';
+      }
+    }
+
+    function minifyJSON() {
+      const input = document.getElementById('jsonInput').value.trim();
+      const output = document.getElementById('jsonOutput');
+      const status = document.getElementById('statusMsg');
+      status.innerHTML = '';
+      if (!input) { status.innerHTML = '<div class="error-msg">请输入 JSON 数据</div>'; return; }
+      try {
+        const parsed = JSON.parse(input);
+        output.textContent = JSON.stringify(parsed);
+        status.innerHTML = '<div class="success-msg">✅ 压缩成功</div>';
+      } catch (e) {
+        const info = extractErrorInfo(e.message, input);
+        status.innerHTML = `<div class="error-msg">❌ JSON 格式错误<br>错误：${info.msg}<br>位置：第 ${info.line} 行，第 ${info.col} 列</div>`;
+        output.textContent = '';
+      }
+    }
+
+    function validateJSON() {
+      const input = document.getElementById('jsonInput').value.trim();
+      const output = document.getElementById('jsonOutput');
+      const status = document.getElementById('statusMsg');
+      if (!input) { status.innerHTML = '<div class="error-msg">请输入 JSON 数据</div>'; return; }
+      try {
+        JSON.parse(input);
+        status.innerHTML = '<div class="success-msg">✅ JSON 格式正确</div>';
+        output.textContent = '';
+      } catch (e) {
+        const info = extractErrorInfo(e.message, input);
+        status.innerHTML = `<div class="error-msg">❌ JSON 格式错误<br>错误：${info.msg}<br>位置：第 ${info.line} 行，第 ${info.col} 列</div>`;
+        output.textContent = '';
+      }
+    }
+
+    function extractErrorInfo(msg, input) {
+      const posMatch = msg.match(/position\s+(\d+)/i);
+      let line = 1, col = 1;
+      if (posMatch) {
+        const pos = parseInt(posMatch[1]);
+        const lines = input.substring(0, pos).split('\n');
+        line = lines.length;
+        col = lines[lines.length - 1].length + 1;
+      }
+      return { msg: msg.replace(/^JSON\.parse:\s*/, ''), line, col };
+    }
+
+    function copyOutput() {
+      const text = document.getElementById('jsonOutput').textContent;
+      if (!text) { showToast('没有内容可复制'); return; }
+      navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
+    }
+
+    function clearAll() {
+      document.getElementById('jsonInput').value = '';
+      document.getElementById('jsonOutput').textContent = '';
+      document.getElementById('statusMsg').innerHTML = '';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML 实体编解码 - DevToolBox</title>
+  <meta name="description" content="在线HTML实体编码解码工具，特殊字符转义与反转义">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .area-label { font-size: 13px; color: #aaa; margin-bottom: 6px; display: block; }
+    textarea {
+      width: 100%; min-height: 140px; background: #1e1e2e; border: 1px solid #3a3a5e; color: #e0e0e0;
+      padding: 12px; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 14px; resize: vertical;
+      box-sizing: border-box; line-height: 1.6;
+    }
+    .btn-row { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+    .ref-table { margin-top: 24px; }
+    .ref-table h3 { font-size: 15px; color: #ccc; margin-bottom: 12px; }
+    .ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+    .ref-item {
+      display: flex; justify-content: space-between; align-items: center;
+      background: #1e1e2e; border: 1px solid #3a3a5e; border-radius: 6px; padding: 8px 12px;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .ref-item:hover { background: #2a2a3e; }
+    .ref-item .entity { color: #6cf; font-family: 'Consolas', monospace; font-size: 13px; }
+    .ref-item .char { color: #ccc; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🔧 HTML 实体编解码</h1>
+        <p>HTML 特殊字符转义与反转义，支持命名实体和数字实体</p>
+      </div>
+
+      <span class="area-label">输入文本</span>
+      <textarea id="input" placeholder="输入需要编码或解码的文本..." oninput="autoConvert()"></textarea>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="encode()">编码 (转义)</button>
+        <button class="btn btn-primary" onclick="decode()">解码 (反转义)</button>
+        <button class="btn btn-secondary" onclick="copyOutput()">复制结果</button>
+        <button class="btn btn-secondary" onclick="swap()">⇄ 交换</button>
+      </div>
+
+      <span class="area-label">输出结果</span>
+      <textarea id="output" readonly style="background:#15152a;"></textarea>
+
+      <div class="ref-table">
+        <h3>常用 HTML 实体速查表（点击复制）</h3>
+        <div class="ref-grid" id="refGrid"></div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    const entities = [
+      { char: '<', entity: '&lt;', desc: '小于号' },
+      { char: '>', entity: '&gt;', desc: '大于号' },
+      { char: '&', entity: '&amp;', desc: '和号' },
+      { char: '"', entity: '&quot;', desc: '双引号' },
+      { char: "'", entity: '&apos;', desc: '单引号' },
+      { char: ' ', entity: '&nbsp;', desc: '空格' },
+      { char: '©', entity: '&copy;', desc: '版权' },
+      { char: '®', entity: '&reg;', desc: '注册商标' },
+      { char: '™', entity: '&trade;', desc: '商标' },
+      { char: '¥', entity: '&yen;', desc: '人民币' },
+      { char: '€', entity: '&euro;', desc: '欧元' },
+      { char: '£', entity: '&pound;', desc: '英镑' },
+      { char: '¢', entity: '&cent;', desc: '美分' },
+      { char: '§', entity: '&sect;', desc: '章节' },
+      { char: '°', entity: '&deg;', desc: '度' },
+      { char: '±', entity: '&plusmn;', desc: '加减' },
+      { char: '×', entity: '&times;', desc: '乘号' },
+      { char: '÷', entity: '&divide;', desc: '除号' },
+      { char: '→', entity: '&rarr;', desc: '右箭头' },
+      { char: '←', entity: '&larr;', desc: '左箭头' },
+      { char: '…', entity: '&hellip;', desc: '省略号' },
+      { char: '•', entity: '&bull;', desc: '圆点' },
+      { char: '♥', entity: '&hearts;', desc: '心形' },
+      { char: '★', entity: '&#9733;', desc: '星号' }
+    ];
+
+    // Build reference table
+    const grid = document.getElementById('refGrid');
+    entities.forEach(e => {
+      const div = document.createElement('div');
+      div.className = 'ref-item';
+      div.innerHTML = `<span class="entity">${e.entity}</span><span class="char">${e.char}</span>`;
+      div.title = e.desc + ' - 点击复制 ' + e.entity;
+      div.onclick = () => {
+        navigator.clipboard.writeText(e.entity).then(() => showToast('已复制 ' + e.entity));
+      };
+      grid.appendChild(div);
+    });
+
+    function encode() {
+      const input = document.getElementById('input').value;
+      const output = input
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+      document.getElementById('output').value = output;
+    }
+
+    function decode() {
+      const input = document.getElementById('input').value;
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = input;
+      document.getElementById('output').value = textarea.value;
+    }
+
+    function autoConvert() {
+      // No auto convert, user picks action
+    }
+
+    function copyOutput() {
+      const text = document.getElementById('output').value;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => showToast('已复制'));
+    }
+
+    function swap() {
+      const input = document.getElementById('input');
+      const output = document.getElementById('output');
+      const tmp = input.value;
+      input.value = output.value;
+      output.value = tmp;
+    }
+  </script>
+</body>
+</html>

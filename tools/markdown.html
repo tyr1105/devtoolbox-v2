@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown 预览 - DevToolBox</title>
+  <meta name="description" content="在线 Markdown 实时预览工具，支持常见语法，纯前端解析">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .md-container { display: flex; gap: 16px; height: 70vh; }
+    .md-input, .md-preview { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .md-input textarea {
+      flex: 1; background: #1e1e2e; border: 1px solid #3a3a5e; color: #e0e0e0;
+      padding: 16px; border-radius: 8px; font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 14px; resize: none; line-height: 1.6;
+    }
+    .md-preview .preview-box {
+      flex: 1; background: #1e1e2e; border: 1px solid #3a3a5e; border-radius: 8px;
+      padding: 16px; overflow-y: auto; line-height: 1.8;
+    }
+    .label { margin-bottom: 8px; display: block; font-size: 13px; color: #aaa; }
+    .btn-row { margin-bottom: 12px; display: flex; gap: 8px; }
+    .preview-box h1 { font-size: 1.8em; border-bottom: 1px solid #3a3a5e; padding-bottom: 8px; margin-top: 0; color: #e0e0e0; }
+    .preview-box h2 { font-size: 1.5em; border-bottom: 1px solid #3a3a5e; padding-bottom: 6px; color: #e0e0e0; }
+    .preview-box h3 { font-size: 1.25em; color: #e0e0e0; }
+    .preview-box h4 { font-size: 1.1em; color: #e0e0e0; }
+    .preview-box p { margin: 8px 0; color: #ccc; }
+    .preview-box ul, .preview-box ol { padding-left: 24px; color: #ccc; }
+    .preview-box li { margin: 4px 0; }
+    .preview-box code { background: #2a2a3e; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; color: #f0a050; }
+    .preview-box pre { background: #1a1a2e; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; }
+    .preview-box pre code { background: none; padding: 0; color: #ccc; }
+    .preview-box blockquote { border-left: 4px solid #6c63ff; padding: 8px 16px; margin: 12px 0; background: #1a1a2e; color: #aaa; }
+    .preview-box a { color: #6c9fff; text-decoration: none; }
+    .preview-box a:hover { text-decoration: underline; }
+    .preview-box img { max-width: 100%; border-radius: 8px; }
+    .preview-box table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    .preview-box th, .preview-box td { border: 1px solid #3a3a5e; padding: 8px 12px; text-align: left; color: #ccc; }
+    .preview-box th { background: #2a2a3e; font-weight: bold; }
+    .preview-box hr { border: none; border-top: 1px solid #3a3a5e; margin: 16px 0; }
+    .preview-box strong { color: #f0f0f0; }
+    .preview-box em { color: #ddd; }
+    @media (max-width: 768px) { .md-container { flex-direction: column; height: auto; } .md-input textarea, .md-preview .preview-box { min-height: 300px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>📖 Markdown 预览</h1>
+        <p>实时 Markdown 渲染预览，支持标题、列表、代码块、表格等常见语法</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="copyHTML()">复制 HTML</button>
+        <button class="btn btn-secondary" onclick="loadSample()">加载示例</button>
+      </div>
+      <div class="md-container">
+        <div class="md-input">
+          <span class="label">Markdown 输入</span>
+          <textarea id="mdInput" oninput="render()" placeholder="在此输入 Markdown 内容..."></textarea>
+        </div>
+        <div class="md-preview">
+          <span class="label">预览</span>
+          <div class="preview-box" id="preview"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function parseMD(md) {
+      let html = md;
+      // Code blocks
+      html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        return '<pre><code>' + esc(code.trim()) + '</code></pre>';
+      });
+      // Inline code
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Tables
+      html = html.replace(/((?:^\|.+\|[ ]*\n)+)/gm, (block) => {
+        const lines = block.trim().split('\n');
+        if (lines.length < 2) return block;
+        const rows = lines.filter(l => !l.match(/^\|[\s\-:|]+\|$/));
+        if (rows.length === 0) return block;
+        let table = '<table>';
+        rows.forEach((row, i) => {
+          const cells = row.split('|').filter(c => c.trim() !== '').map(c => c.trim());
+          const tag = i === 0 ? 'th' : 'td';
+          table += '<tr>' + cells.map(c => '<' + tag + '>' + c + '</' + tag + '>').join('') + '</tr>';
+        });
+        table += '</table>';
+        return table;
+      });
+      // Lines
+      html = html.split('\n');
+      let out = [];
+      let inList = false;
+      let listType = '';
+      for (let i = 0; i < html.length; i++) {
+        let line = html[i];
+        // Headers
+        if (line.match(/^######\s/)) { line = '<h6>' + line.slice(7) + '</h6>'; }
+        else if (line.match(/^#####\s/)) { line = '<h5>' + line.slice(6) + '</h5>'; }
+        else if (line.match(/^####\s/)) { line = '<h4>' + line.slice(5) + '</h4>'; }
+        else if (line.match(/^###\s/)) { line = '<h3>' + line.slice(4) + '</h3>'; }
+        else if (line.match(/^##\s/)) { line = '<h2>' + line.slice(3) + '</h2>'; }
+        else if (line.match(/^#\s/)) { line = '<h1>' + line.slice(2) + '</h1>'; }
+        // HR
+        else if (line.match(/^---+$/)) { line = '<hr>'; }
+        // Blockquote
+        else if (line.match(/^>\s/)) { line = '<blockquote>' + line.slice(2) + '</blockquote>'; }
+        // Unordered list
+        else if (line.match(/^[\*\-\+]\s/)) {
+          if (!inList || listType !== 'ul') { if (inList) out.push('</' + listType + '>'); out.push('<ul>'); inList = true; listType = 'ul'; }
+          line = '<li>' + line.replace(/^[\*\-\+]\s/, '') + '</li>';
+        }
+        // Ordered list
+        else if (line.match(/^\d+\.\s/)) {
+          if (!inList || listType !== 'ol') { if (inList) out.push('</' + listType + '>'); out.push('<ol>'); inList = true; listType = 'ol'; }
+          line = '<li>' + line.replace(/^\d+\.\s/, '') + '</li>';
+        }
+        else {
+          if (inList) { out.push('</' + listType + '>'); inList = false; }
+          if (line.trim() === '') { line = ''; }
+          else { line = '<p>' + line + '</p>'; }
+        }
+        out.push(line);
+      }
+      if (inList) out.push('</' + listType + '>');
+      html = out.join('\n');
+      // Bold & Italic
+      html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      // Images before links
+      html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+      // Links
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+      return html;
+    }
+
+    function render() {
+      const md = document.getElementById('mdInput').value;
+      document.getElementById('preview').innerHTML = parseMD(md);
+    }
+
+    function copyHTML() {
+      const html = document.getElementById('preview').innerHTML;
+      if (!html) return;
+      navigator.clipboard.writeText(html).then(() => showToast('HTML 已复制'));
+    }
+
+    function loadSample() {
+      document.getElementById('mdInput').value = `# Markdown 示例
+
+## 标题语法
+
+这是 **粗体** 和 *斜体* 文本，还有 \`行内代码\`。
+
+### 列表
+
+- 第一项
+- 第二项
+- 第三项
+
+1. 步骤一
+2. 步骤二
+3. 步骤三
+
+### 代码块
+
+\`\`\`javascript
+function hello() {
+  console.log("Hello, World!");
+}
+\`\`\`
+
+### 引用
+
+> 这是一段引用文字，用于展示 Markdown 的引用语法。
+
+### 链接与图片
+
+[访问 GitHub](https://github.com)
+
+![示例图片](https://via.placeholder.com/300x200)
+
+### 表格
+
+| 名称 | 类型 | 描述 |
+|------|------|------|
+| HTML | 标记语言 | 网页结构 |
+| CSS | 样式表 | 网页样式 |
+| JS | 编程语言 | 交互逻辑 |
+
+---
+
+*以上是 Markdown 基础语法示例。*`;
+      render();
+    }
+
+    loadSample();
+  </script>
+</body>
+</html>

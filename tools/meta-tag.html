@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meta 标签生成 - DevToolBox</title>
+  <meta name="description" content="在线Meta标签生成器，生成SEO和社交媒体所需的HTML meta标签">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .meta-layout { display: flex; gap: 20px; }
+    .meta-form { flex: 1; min-width: 300px; }
+    .meta-output { flex: 1; min-width: 300px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 4px; }
+    .field .count { font-size: 11px; }
+    .field .count.warn { color: #f90; }
+    .field .count.over { color: #f66; }
+    .field .count.ok { color: #4f4; }
+    .field input, .field textarea, .field select {
+      width: 100%; background: #2a2a3e; border: 1px solid #3a3a5e; color: #e0e0e0;
+      padding: 8px 12px; border-radius: 6px; font-size: 14px; box-sizing: border-box;
+    }
+    .field textarea { min-height: 70px; resize: vertical; font-family: inherit; }
+    .field input:focus, .field textarea:focus { outline: none; border-color: #6c63ff; }
+    .section-title { font-size: 14px; color: #6cf; margin: 18px 0 10px 0; padding-bottom: 6px; border-bottom: 1px solid #2a2a3e; font-weight: 600; }
+    .section-title:first-of-type { margin-top: 0; }
+    .code-output {
+      background: #1a1a2e; border: 1px solid #3a3a5e; border-radius: 8px; padding: 16px;
+      font-family: 'Consolas', monospace; font-size: 12px; color: #8f8; white-space: pre-wrap;
+      word-break: break-all; max-height: 70vh; overflow-y: auto; line-height: 1.6;
+    }
+    .preview-card {
+      background: #1e1e2e; border: 1px solid #3a3a5e; border-radius: 8px; padding: 16px; margin-bottom: 16px;
+    }
+    .preview-card .label { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .preview-card .preview-title { font-size: 16px; color: #6cf; margin-bottom: 4px; }
+    .preview-card .preview-url { font-size: 12px; color: #4a4; margin-bottom: 4px; }
+    .preview-card .preview-desc { font-size: 13px; color: #aaa; }
+    @media (max-width: 768px) { .meta-layout { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🏷️ Meta 标签生成器</h1>
+        <p>生成完整的 HTML Meta 标签，包含 SEO 基础标签、Open Graph 和 Twitter Card</p>
+      </div>
+      <div class="meta-layout">
+        <div class="meta-form">
+          <div class="section-title">基础 SEO</div>
+
+          <div class="field">
+            <label>Title <span class="count" id="titleCount">0 / 60</span></label>
+            <input type="text" id="metaTitle" placeholder="页面标题" oninput="update()" maxlength="200">
+          </div>
+          <div class="field">
+            <label>Description <span class="count" id="descCount">0 / 160</span></label>
+            <textarea id="metaDesc" placeholder="页面描述..." oninput="update()"></textarea>
+          </div>
+          <div class="field">
+            <label>Keywords</label>
+            <input type="text" id="metaKeywords" placeholder="关键词1, 关键词2, ..." oninput="update()">
+          </div>
+          <div class="field">
+            <label>Author</label>
+            <input type="text" id="metaAuthor" placeholder="作者名称" oninput="update()">
+          </div>
+          <div class="field">
+            <label>Viewport</label>
+            <select id="metaViewport" onchange="update()">
+              <option value="width=device-width, initial-scale=1">width=device-width, initial-scale=1</option>
+              <option value="width=device-width, initial-scale=1, maximum-scale=1">禁止缩放</option>
+              <option value="width=device-width, initial-scale=1, user-scalable=yes">允许缩放</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Robots</label>
+            <select id="metaRobots" onchange="update()">
+              <option value="index, follow">index, follow</option>
+              <option value="noindex, follow">noindex, follow</option>
+              <option value="index, nofollow">index, nofollow</option>
+              <option value="noindex, nofollow">noindex, nofollow</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Charset</label>
+            <select id="metaCharset" onchange="update()">
+              <option value="UTF-8">UTF-8</option>
+              <option value="ISO-8859-1">ISO-8859-1</option>
+              <option value="GBK">GBK</option>
+            </select>
+          </div>
+
+          <div class="section-title">Open Graph (社交媒体)</div>
+          <div class="field">
+            <label>og:title</label>
+            <input type="text" id="ogTitle" placeholder="社交分享标题（留空则使用 Title）" oninput="update()">
+          </div>
+          <div class="field">
+            <label>og:description</label>
+            <textarea id="ogDesc" placeholder="社交分享描述（留空则使用 Description）" oninput="update()"></textarea>
+          </div>
+          <div class="field">
+            <label>og:image</label>
+            <input type="text" id="ogImage" placeholder="https://example.com/image.jpg" oninput="update()">
+          </div>
+          <div class="field">
+            <label>og:url</label>
+            <input type="text" id="ogUrl" placeholder="https://example.com" oninput="update()">
+          </div>
+          <div class="field">
+            <label>og:type</label>
+            <select id="ogType" onchange="update()">
+              <option value="website">website</option>
+              <option value="article">article</option>
+              <option value="profile">profile</option>
+              <option value="product">product</option>
+            </select>
+          </div>
+
+          <div class="section-title">Twitter Card</div>
+          <div class="field">
+            <label>twitter:card</label>
+            <select id="twitterCard" onchange="update()">
+              <option value="summary">summary</option>
+              <option value="summary_large_image">summary_large_image</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>twitter:site</label>
+            <input type="text" id="twitterSite" placeholder="@username" oninput="update()">
+          </div>
+          <div class="field">
+            <label>twitter:creator</label>
+            <input type="text" id="twitterCreator" placeholder="@username" oninput="update()">
+          </div>
+        </div>
+
+        <div class="meta-output">
+          <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <button class="btn btn-primary" onclick="copyCode()">复制代码</button>
+            <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+          </div>
+
+          <div class="preview-card">
+            <div class="label">🔍 搜索引擎预览</div>
+            <div class="preview-title" id="previewTitle">页面标题</div>
+            <div class="preview-url" id="previewUrl">https://example.com</div>
+            <div class="preview-desc" id="previewDesc">页面描述将显示在这里...</div>
+          </div>
+
+          <div class="label" style="margin-bottom:8px;">生成的 HTML 代码</div>
+          <div class="code-output" id="codeOutput"><!-- 在此输入内容生成代码 --></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    function val(id) { return document.getElementById(id).value.trim(); }
+    function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function updateCount(id, current, max) {
+      const el = document.getElementById(id);
+      el.textContent = current + ' / ' + max;
+      el.className = 'count ' + (current > max ? 'over' : current > max * 0.8 ? 'warn' : 'ok');
+    }
+
+    function update() {
+      const title = val('metaTitle');
+      const desc = val('metaDesc');
+      const keywords = val('metaKeywords');
+      const author = val('metaAuthor');
+      const viewport = val('metaViewport');
+      const robots = val('metaRobots');
+      const charset = val('metaCharset');
+
+      const ogTitle = val('ogTitle') || title;
+      const ogDesc = val('ogDesc') || desc;
+      const ogImage = val('ogImage');
+      const ogUrl = val('ogUrl');
+      const ogType = val('ogType');
+
+      const twitterCard = val('twitterCard');
+      const twitterSite = val('twitterSite');
+      const twitterCreator = val('twitterCreator');
+
+      updateCount('titleCount', title.length, 60);
+      updateCount('descCount', desc.length, 160);
+
+      // Preview
+      document.getElementById('previewTitle').textContent = title || '页面标题';
+      document.getElementById('previewUrl').textContent = ogUrl || 'https://example.com';
+      document.getElementById('previewDesc').textContent = desc || '页面描述将显示在这里...';
+
+      // Generate code
+      let lines = [];
+      lines.push(`<meta charset="${charset}">`);
+      lines.push(`<meta name="viewport" content="${viewport}">`);
+      if (title) lines.push(`<title>${esc(title)}</title>`);
+      if (desc) lines.push(`<meta name="description" content="${esc(desc)}">`);
+      if (keywords) lines.push(`<meta name="keywords" content="${esc(keywords)}">`);
+      if (author) lines.push(`<meta name="author" content="${esc(author)}">`);
+      lines.push(`<meta name="robots" content="${robots}">`);
+
+      if (ogTitle || ogDesc || ogImage || ogUrl) {
+        lines.push('');
+        lines.push('<!-- Open Graph -->');
+        lines.push(`<meta property="og:type" content="${ogType}">`);
+        if (ogTitle) lines.push(`<meta property="og:title" content="${esc(ogTitle)}">`);
+        if (ogDesc) lines.push(`<meta property="og:description" content="${esc(ogDesc)}">`);
+        if (ogImage) lines.push(`<meta property="og:image" content="${esc(ogImage)}">`);
+        if (ogUrl) lines.push(`<meta property="og:url" content="${esc(ogUrl)}">`);
+      }
+
+      lines.push('');
+      lines.push('<!-- Twitter Card -->');
+      lines.push(`<meta name="twitter:card" content="${twitterCard}">`);
+      if (ogTitle) lines.push(`<meta name="twitter:title" content="${esc(ogTitle)}">`);
+      if (ogDesc) lines.push(`<meta name="twitter:description" content="${esc(ogDesc)}">`);
+      if (ogImage) lines.push(`<meta name="twitter:image" content="${esc(ogImage)}">`);
+      if (twitterSite) lines.push(`<meta name="twitter:site" content="${esc(twitterSite)}">`);
+      if (twitterCreator) lines.push(`<meta name="twitter:creator" content="${esc(twitterCreator)}">`);
+
+      document.getElementById('codeOutput').textContent = lines.join('\n');
+    }
+
+    function copyCode() {
+      const code = document.getElementById('codeOutput').textContent;
+      navigator.clipboard.writeText(code).then(() => showToast('代码已复制'));
+    }
+
+    function clearAll() {
+      document.querySelectorAll('.meta-form input[type="text"], .meta-form textarea').forEach(el => el.value = '');
+      update();
+    }
+
+    update();
+  </script>
+</body>
+</html>

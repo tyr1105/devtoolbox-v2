@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>占位文本生成 - DevToolBox</title>
+  <meta name="description" content="在线占位文本生成器，支持中文、英文、日文，生成段落、句子或单词">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .options-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .option-group { display: flex; flex-direction: column; gap: 6px; }
+    .option-group label { font-size: 13px; color: #aaa; }
+    .option-group select, .option-group input[type="number"] {
+      background: #2a2a3e; border: 1px solid #3a3a5e; color: #e0e0e0;
+      padding: 8px 12px; border-radius: 6px; font-size: 14px; min-width: 120px;
+    }
+    .output-area { white-space: pre-wrap; line-height: 1.8; font-size: 14px; color: #ccc; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>📝 占位文本生成</h1>
+        <p>生成 Lorem Ipsum 或中文/日文占位文本，支持段落、句子和单词</p>
+      </div>
+      <div class="options-row">
+        <div class="option-group">
+          <label>语言</label>
+          <select id="lang">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>类型</label>
+          <select id="type">
+            <option value="paragraph">段落</option>
+            <option value="sentence">句子</option>
+            <option value="word">单词</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>数量</label>
+          <input type="number" id="count" value="3" min="1" max="100">
+        </div>
+        <button class="btn btn-primary" onclick="generate()">生成</button>
+        <button class="btn btn-secondary" onclick="copyOutput()">复制</button>
+      </div>
+      <div class="output-area" id="output" style="min-height:200px;">点击「生成」按钮产生占位文本</div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    const zhSentences = [
+      "在这个数字化的时代，互联网已经成为人们生活中不可或缺的一部分。",
+      "随着技术的不断发展，越来越多的创新应用出现在我们的视野中。",
+      "用户体验是产品设计中最重要的考量因素之一。",
+      "数据安全和隐私保护是当今社会面临的主要挑战。",
+      "人工智能技术正在深刻改变着各行各业的运作方式。",
+      "云计算为企业提供了灵活高效的计算资源解决方案。",
+      "移动端应用开发需要考虑不同设备的兼容性问题。",
+      "前端框架的演进使得网页开发变得更加高效和便捷。",
+      "持续集成和持续部署已成为现代软件开发的标准流程。",
+      "微服务架构能够有效提升系统的可扩展性和可维护性。",
+      "响应式设计确保网页在各种屏幕尺寸下都能良好展示。",
+      "代码质量和团队协作是项目成功的关键要素。",
+      "开源社区为技术发展提供了强大的推动力。",
+      "大数据分析帮助企业做出更明智的商业决策。",
+      "物联网技术正在将更多设备连接到互联网中。",
+      "敏捷开发方法论强调快速迭代和持续反馈。",
+      "容器化技术简化了应用程序的部署和管理流程。",
+      "良好的接口设计能够显著提升系统的可用性。",
+      "性能优化是提升用户体验的重要手段之一。",
+      "版本控制系统是团队协作开发的基础工具。"
+    ];
+
+    const enWords = ["lorem","ipsum","dolor","sit","amet","consectetur","adipiscing","elit","sed","do","eiusmod","tempor","incididunt","ut","labore","et","dolore","magna","aliqua","enim","ad","minim","veniam","quis","nostrud","exercitation","ullamco","laboris","nisi","aliquip","ex","ea","commodo","consequat","duis","aute","irure","in","reprehenderit","voluptate","velit","esse","cillum","fugiat","nulla","pariatur","excepteur","sint","occaecat","cupidatat","non","proident","sunt","culpa","qui","officia","deserunt","mollit","anim","id","est","laborum","at","vero","eos","accusamus","iusto","odio","dignissimos","ducimus","blanditiis","praesentium","voluptatum","deleniti","atque","corrupti","quos","dolores","quas","molestias","excepturi","occaecati","cupiditate","provident","similique","perspiciatis","unde","omnis","iste","natus","error","voluptatem","accusantium","doloremque","laudantium","totam","rem","aperiam","eaque","ipsa","quae","ab","illo","inventore","veritatis","quasi","architecto","beatae","vitae","dicta","explicabo","nemo","ipsam","quia","voluptas","aspernatur","aut","odit","fugit","consequuntur","magni","ratione","sequi","nesciunt","neque","porro","quisquam","dolorem","adipisci","numquam","eius","modi","tempora","incidunt","magnam","aliquam","quaerat"];
+    const jaWords = ["こんにちは","世界","今日","天気","良し","花","鳥","風","月","山","川","海","空","星","夢","希望","光","影","時","間","心","魂","力","道","法","寺","社","門","窓","道","路","街","角","場","所","位","置","方","向","目","的","意","味","価","値","色","形","音","声","匂","味","触","感","情","思","考","記","憶","学","習","教","育","技","術","科","学","文","化","芸","術","音","楽","絵","画","映","画","写","真","脚","本","演","劇","舞","台","歌","手","役","者","監","督","制","作"];
+
+    const enSentences = [
+      "The quick brown fox jumps over the lazy dog.",
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+      "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.",
+      "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore.",
+      "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia.",
+      "Nulla pariatur excepteur sint occaecat cupidatat non proident.",
+      "Sed ut perspiciatis unde omnis iste natus error sit voluptatem.",
+      "Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.",
+      "Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.",
+      "At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis.",
+      "Et harum quidem rerum facilis est et expedita distinctio.",
+      "Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit.",
+      "Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus.",
+      "Itaque earum rerum hic tenetur a sapiente delectus reiciendis.",
+      "Vero eos et accusamus iusto odio dignissimos ducimus blanditiis praesentium.",
+      "Voluptatum deleniti atque corrupti quos dolores quas molestias excepturi.",
+      "Occaecati cupiditate non provident, similique sunt in culpa officia deserunt.",
+      "Mollitia animi, id est laborum et dolorum fuga et harum quidem rerum.",
+      "Facilis est et expedita distinctio nam libero tempore cum soluta nobis."
+    ];
+
+    const jaSentences = [
+      "今日はとても良い天気ですね。散歩に行きたくなります。",
+      "このアプリケーションは最新の技術を使用して開発されています。",
+      "ユーザーエクスペリエンスの向上は、製品開発において重要な要素です。",
+      "データセキュリティとプライバシー保護は、現代社会の主要な課題です。",
+      "人工知能技術は、各業界の運用方法に大きな変革をもたらしています。",
+      "クラウドコンピューティングは、柔軟で効率的なリソースソリューションを提供します。",
+      "オープンソースコミュニティは技術開発に強力な推進力を提供しています。",
+      "コンテナ技術はアプリケーションの展開と管理を簡素化します。",
+      "パフォーマンス最適化はユーザー体験を向上させる重要な手段です。",
+      "バージョン管理システムはチーム開発の基礎ツールです。"
+    ];
+
+    function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function randN(arr, n) {
+      let r = [];
+      for (let i = 0; i < n; i++) r.push(rand(arr));
+      return r;
+    }
+
+    function generate() {
+      const lang = document.getElementById('lang').value;
+      const type = document.getElementById('type').value;
+      const count = Math.max(1, parseInt(document.getElementById('count').value) || 1);
+      let result = '';
+
+      if (type === 'word') {
+        if (lang === 'zh') result = randN(zhSentences.join('').split('，'), count).join(' ');
+        else if (lang === 'en') result = randN(enWords, count).join(' ');
+        else result = randN(jaWords, count).join('・');
+      } else if (type === 'sentence') {
+        let src = lang === 'zh' ? zhSentences : lang === 'en' ? enSentences : jaSentences;
+        result = randN(src, count).join('\n');
+      } else {
+        let src = lang === 'zh' ? zhSentences : lang === 'en' ? enSentences : jaSentences;
+        for (let i = 0; i < count; i++) {
+          let sCount = 3 + Math.floor(Math.random() * 4);
+          let para = randN(src, sCount).join(lang === 'ja' ? '。' : lang === 'zh' ? '。' : ' ');
+          if (lang === 'zh') para += '。';
+          else if (lang === 'ja') para += '。';
+          result += para + '\n\n';
+        }
+        result = result.trim();
+      }
+
+      document.getElementById('output').textContent = result;
+    }
+
+    function copyOutput() {
+      const text = document.getElementById('output').textContent;
+      if (!text || text === '点击「生成」按钮产生占位文本') return;
+      navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
+    }
+
+    generate();
+  </script>
+</body>
+</html>

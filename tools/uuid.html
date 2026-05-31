@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UUID 生成器 - DevToolBox</title>
+  <meta name="description" content="在线生成UUID（通用唯一标识符），支持批量生成和格式选项">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .uuid-display { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; font-family: 'Consolas', 'Monaco', monospace; font-size: 28px; text-align: center; color: var(--accent); word-break: break-all; letter-spacing: 1px; margin-bottom: 16px; }
+    .options-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .option-group { display: flex; align-items: center; gap: 8px; }
+    .option-group label { color: var(--text2); font-size: 14px; }
+    .option-group select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 14px; }
+    .option-group select:focus { outline: none; border-color: var(--accent); }
+    .option-group input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+    .batch-area { margin-top: 24px; }
+    .batch-list { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .batch-item { padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); font-family: 'Consolas', monospace; font-size: 14px; }
+    .batch-item:last-child { border-bottom: none; }
+    .batch-item .uuid-val { color: var(--text); word-break: break-all; flex: 1; }
+    .batch-item .item-num { color: var(--text2); font-size: 12px; min-width: 32px; }
+    .batch-item button { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text2); cursor: pointer; font-size: 12px; padding: 4px 10px; margin-left: 8px; transition: all 0.2s; }
+    .batch-item button:hover { border-color: var(--accent); color: var(--accent); }
+    .batch-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🆔 UUID 生成器</h1>
+        <p>生成 UUID（通用唯一标识符），支持批量生成和大小写、连字符格式选项</p>
+      </div>
+
+      <div class="uuid-display" id="uuidDisplay">点击生成按钮</div>
+
+      <div class="btn-group" style="margin-bottom:20px;">
+        <button class="btn btn-primary" onclick="generateSingle()">生成 UUID</button>
+        <button class="btn btn-secondary" onclick="copyUUID()">复制</button>
+      </div>
+
+      <div class="label">格式选项</div>
+      <div class="options-row">
+        <div class="option-group">
+          <label>大小写：</label>
+          <select id="caseOption">
+            <option value="lower">小写</option>
+            <option value="upper">大写</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <input type="checkbox" id="hyphens" checked>
+          <label for="hyphens">包含连字符</label>
+        </div>
+      </div>
+
+      <div class="label">批量生成</div>
+      <div class="options-row">
+        <div class="option-group">
+          <label>数量：</label>
+          <select id="batchCount">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="generateBatch()">批量生成</button>
+        <button class="btn btn-secondary" onclick="copyAllUUIDs()">复制全部</button>
+      </div>
+
+      <div class="batch-area" id="batchArea" style="display:none;">
+        <div class="batch-header">
+          <span class="label" style="margin:0;">生成结果</span>
+          <span style="color:var(--text2);font-size:13px;" id="batchCount2"></span>
+        </div>
+        <div class="batch-list" id="batchList"></div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    function generateUUID() {
+      // Generate v4 UUID using crypto
+      if (crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      // Fallback
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+      bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10
+      const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+      return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    }
+
+    function formatUUID(uuid) {
+      const upper = document.getElementById('caseOption').value === 'upper';
+      const withHyphens = document.getElementById('hyphens').checked;
+      let result = uuid;
+      if (upper) result = result.toUpperCase();
+      else result = result.toLowerCase();
+      if (!withHyphens) result = result.replace(/-/g, '');
+      return result;
+    }
+
+    function generateSingle() {
+      const uuid = formatUUID(generateUUID());
+      document.getElementById('uuidDisplay').textContent = uuid;
+    }
+
+    let batchUUIDs = [];
+
+    function generateBatch() {
+      const count = parseInt(document.getElementById('batchCount').value);
+      batchUUIDs = [];
+      for (let i = 0; i < count; i++) {
+        batchUUIDs.push(formatUUID(generateUUID()));
+      }
+
+      const list = document.getElementById('batchList');
+      let html = '';
+      batchUUIDs.forEach((uuid, i) => {
+        html += `<div class="batch-item">
+          <span class="item-num">${i + 1}</span>
+          <span class="uuid-val">${escapeHtml(uuid)}</span>
+          <button onclick="copySingle(${i})">复制</button>
+        </div>`;
+      });
+      list.innerHTML = html;
+      document.getElementById('batchCount2').textContent = `共 ${count} 个`;
+      document.getElementById('batchArea').style.display = 'block';
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function copyUUID() {
+      const text = document.getElementById('uuidDisplay').textContent;
+      if (!text || text === '点击生成按钮') { showToast('请先生成 UUID'); return; }
+      navigator.clipboard.writeText(text).then(() => showToast('已复制'));
+    }
+
+    function copySingle(index) {
+      navigator.clipboard.writeText(batchUUIDs[index]).then(() => showToast('已复制'));
+    }
+
+    function copyAllUUIDs() {
+      if (batchUUIDs.length === 0) { showToast('请先生成批量 UUID'); return; }
+      navigator.clipboard.writeText(batchUUIDs.join('\n')).then(() => showToast('已复制全部 ' + batchUUIDs.length + ' 个 UUID'));
+    }
+
+    // Auto-generate on load
+    generateSingle();
+  </script>
+</body>
+</html>

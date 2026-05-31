@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS 渐变生成器 - DevToolBox</title>
+  <meta name="description" content="在线CSS渐变生成器，支持线性和径向渐变，实时预览">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .gradient-preview { width: 100%; height: 260px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #3a3a5e; }
+    .controls { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; align-items: flex-end; }
+    .option-group { display: flex; flex-direction: column; gap: 6px; }
+    .option-group label { font-size: 13px; color: #aaa; }
+    .option-group select { background: #2a2a3e; border: 1px solid #3a3a5e; color: #e0e0e0; padding: 6px 10px; border-radius: 6px; }
+    .option-group input[type="range"] { width: 160px; accent-color: #6c63ff; }
+    .color-stops { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; align-items: flex-end; }
+    .color-stop { display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 12px; background: #1e1e2e; border-radius: 8px; border: 1px solid #3a3a5e; position: relative; }
+    .color-stop input[type="color"] { width: 50px; height: 40px; border: none; border-radius: 6px; cursor: pointer; background: none; }
+    .color-stop input[type="number"] { width: 60px; background: #2a2a3e; border: 1px solid #3a3a5e; color: #e0e0e0; padding: 4px 8px; border-radius: 4px; text-align: center; font-size: 12px; }
+    .color-stop .remove-btn { position: absolute; top: 4px; right: 4px; background: none; border: none; color: #f66; cursor: pointer; font-size: 16px; padding: 0; line-height: 1; }
+    .color-stop label { font-size: 11px; color: #888; }
+    .code-output { background: #1a1a2e; border: 1px solid #3a3a5e; border-radius: 8px; padding: 16px; font-family: 'Consolas', monospace; font-size: 13px; color: #8f8; white-space: pre-wrap; word-break: break-all; }
+    .angle-display { font-size: 13px; color: #aaa; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🎨 CSS 渐变生成器</h1>
+        <p>可视化生成 CSS 线性和径向渐变代码，实时预览效果</p>
+      </div>
+      <div class="gradient-preview" id="preview"></div>
+      <div class="controls">
+        <div class="option-group">
+          <label>渐变类型</label>
+          <select id="gradType" onchange="update()">
+            <option value="linear">线性渐变</option>
+            <option value="radial">径向渐变</option>
+          </select>
+        </div>
+        <div class="option-group" id="angleGroup">
+          <label>角度</label>
+          <input type="range" id="angle" min="0" max="360" value="90" oninput="update()">
+          <span class="angle-display" id="angleDisplay">90°</span>
+        </div>
+        <button class="btn btn-secondary" onclick="addStop()">+ 添加颜色</button>
+        <button class="btn btn-secondary" onclick="randomGradient()">🎲 随机</button>
+      </div>
+      <div class="color-stops" id="stops"></div>
+      <div class="label" style="margin-bottom:8px;">CSS 代码</div>
+      <div class="code-output" id="codeOutput"></div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="copyCSS()">复制 CSS</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    let stops = [
+      { color: '#6c63ff', pos: 0 },
+      { color: '#f857a6', pos: 100 }
+    ];
+
+    function renderStops() {
+      const container = document.getElementById('stops');
+      container.innerHTML = '';
+      stops.forEach((s, i) => {
+        const div = document.createElement('div');
+        div.className = 'color-stop';
+        div.innerHTML = `
+          <label>颜色 ${i + 1}</label>
+          <input type="color" value="${s.color}" onchange="stops[${i}].color=this.value;update()">
+          <label>位置 %</label>
+          <input type="number" value="${s.pos}" min="0" max="100" onchange="stops[${i}].pos=parseInt(this.value)||0;update()">
+          ${stops.length > 2 ? `<button class="remove-btn" onclick="removeStop(${i})">✕</button>` : ''}
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function addStop() {
+      if (stops.length >= 5) return showToast('最多支持5个颜色节点');
+      const randColor = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0');
+      const lastPos = stops[stops.length - 1].pos;
+      stops.push({ color: randColor, pos: Math.min(100, lastPos + Math.floor((100 - lastPos) / 2)) });
+      renderStops();
+      update();
+    }
+
+    function removeStop(i) {
+      if (stops.length <= 2) return;
+      stops.splice(i, 1);
+      renderStops();
+      update();
+    }
+
+    function randomGradient() {
+      stops = stops.map((s, i) => ({
+        color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'),
+        pos: Math.round(i / (stops.length - 1) * 100)
+      }));
+      document.getElementById('angle').value = Math.floor(Math.random() * 360);
+      renderStops();
+      update();
+    }
+
+    function update() {
+      const type = document.getElementById('gradType').value;
+      const angle = document.getElementById('angle').value;
+      const angleGroup = document.getElementById('angleGroup');
+      angleGroup.style.display = type === 'linear' ? '' : 'none';
+      document.getElementById('angleDisplay').textContent = angle + '°';
+
+      const colorStr = stops.map(s => `${s.color} ${s.pos}%`).join(', ');
+      let css;
+      if (type === 'linear') {
+        css = `background: linear-gradient(${angle}deg, ${colorStr});`;
+      } else {
+        css = `background: radial-gradient(circle, ${colorStr});`;
+      }
+
+      document.getElementById('preview').style.cssText = css;
+      document.getElementById('codeOutput').textContent = css;
+    }
+
+    function copyCSS() {
+      const code = document.getElementById('codeOutput').textContent;
+      navigator.clipboard.writeText(code).then(() => showToast('CSS 已复制'));
+    }
+
+    renderStops();
+    update();
+  </script>
+</body>
+</html>

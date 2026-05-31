@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>时间戳转换 - DevToolBox</title>
+  <meta name="description" content="Unix时间戳与日期互转工具，实时显示当前时间戳，支持秒和毫秒自动识别">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .time-card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px; }
+    .time-card .ts-value { font-size: 32px; font-family: 'Consolas', 'Monaco', monospace; color: var(--accent); font-weight: 700; }
+    .time-card .ts-label { color: var(--text2); font-size: 13px; margin-top: 4px; }
+    .time-card .ts-date { color: var(--text); font-size: 16px; margin-top: 8px; }
+    .input-group { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 600px) { .input-group { grid-template-columns: 1fr; } }
+    .input-item { display: flex; flex-direction: column; gap: 6px; }
+    .input-item label { color: var(--text2); font-size: 13px; font-weight: 600; }
+    .input-item input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; box-sizing: border-box; width: 100%; }
+    .input-item input:focus { outline: none; border-color: var(--accent); }
+    .result-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 12px; }
+    .result-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+    .result-row:last-child { border-bottom: none; }
+    .result-row .key { color: var(--text2); }
+    .result-row .val { color: var(--text); font-family: 'Consolas', monospace; }
+    .quick-btns { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+    .quick-btns button { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+    .quick-btns button:hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>⏰ 时间戳转换</h1>
+        <p>Unix 时间戳与日期互转，自动识别秒/毫秒，实时显示当前时间</p>
+      </div>
+
+      <div class="time-card">
+        <div class="ts-label">当前 Unix 时间戳（秒）</div>
+        <div class="ts-value" id="liveTs"></div>
+        <div class="ts-date" id="liveDate"></div>
+      </div>
+
+      <div class="input-group">
+        <div class="input-item">
+          <label>时间戳（秒/毫秒自动识别）</label>
+          <input type="text" id="tsInput" placeholder="例如：1704067200" oninput="fromTimestamp()">
+        </div>
+        <div class="input-item">
+          <label>日期时间</label>
+          <input type="datetime-local" id="dateInput" step="1" oninput="fromDate()">
+        </div>
+      </div>
+
+      <div class="quick-btns">
+        <button onclick="setQuick('now')">当前</button>
+        <button onclick="setQuick('1h')">1小时前</button>
+        <button onclick="setQuick('6h')">6小时前</button>
+        <button onclick="setQuick('1d')">1天前</button>
+        <button onclick="setQuick('7d')">7天前</button>
+        <button onclick="setQuick('30d')">30天前</button>
+        <button onclick="setQuick('1h-ago')">1小时后</button>
+        <button onclick="setQuick('1d-ago')">1天后</button>
+      </div>
+
+      <div class="btn-group" style="margin-bottom:12px;">
+        <button class="btn btn-secondary" onclick="copyCurrentTs()">复制时间戳</button>
+        <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+      </div>
+
+      <div class="result-box" id="resultBox" style="display:none;">
+        <div class="result-row"><span class="key">时间戳（秒）</span><span class="val" id="rSec"></span></div>
+        <div class="result-row"><span class="key">时间戳（毫秒）</span><span class="val" id="rMs"></span></div>
+        <div class="result-row"><span class="key">本地时间</span><span class="val" id="rLocal"></span></div>
+        <div class="result-row"><span class="key">UTC 时间</span><span class="val" id="rUTC"></span></div>
+        <div class="result-row"><span class="key">ISO 8601</span><span class="val" id="rISO"></span></div>
+        <div class="result-row"><span class="key">相对时间</span><span class="val" id="rRelative"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    function pad(n) { return n < 10 ? '0' + n : n; }
+
+    function formatLocal(d) {
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function toLocalInput(d) {
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function updateLive() {
+      const now = new Date();
+      document.getElementById('liveTs').textContent = Math.floor(now.getTime() / 1000);
+      document.getElementById('liveDate').textContent = formatLocal(now);
+    }
+
+    function showResult(date) {
+      const sec = Math.floor(date.getTime() / 1000);
+      const ms = date.getTime();
+      document.getElementById('rSec').textContent = sec;
+      document.getElementById('rMs').textContent = ms;
+      document.getElementById('rLocal').textContent = formatLocal(date);
+      document.getElementById('rUTC').textContent = date.toUTCString();
+      document.getElementById('rISO').textContent = date.toISOString();
+      document.getElementById('rRelative').textContent = getRelative(date);
+      document.getElementById('resultBox').style.display = 'block';
+    }
+
+    function getRelative(d) {
+      const diff = Date.now() - d.getTime();
+      const abs = Math.abs(diff);
+      const suffix = diff > 0 ? '前' : '后';
+      if (abs < 60) return `${abs}秒${suffix}`;
+      if (abs < 3600) return `${Math.floor(abs/60)}分钟${suffix}`;
+      if (abs < 86400) return `${Math.floor(abs/3600)}小时${suffix}`;
+      if (abs < 2592000) return `${Math.floor(abs/86400)}天${suffix}`;
+      if (abs < 31536000) return `${Math.floor(abs/2592000)}个月${suffix}`;
+      return `${Math.floor(abs/31536000)}年${suffix}`;
+    }
+
+    function fromTimestamp() {
+      const val = document.getElementById('tsInput').value.trim();
+      if (!val || isNaN(val)) { document.getElementById('resultBox').style.display = 'none'; return; }
+      let ts = parseInt(val);
+      // Auto-detect seconds vs milliseconds
+      if (ts < 1e12) ts *= 1000;
+      const date = new Date(ts);
+      if (isNaN(date.getTime())) { document.getElementById('resultBox').style.display = 'none'; return; }
+      document.getElementById('dateInput').value = toLocalInput(date);
+      showResult(date);
+    }
+
+    function fromDate() {
+      const val = document.getElementById('dateInput').value;
+      if (!val) { document.getElementById('resultBox').style.display = 'none'; return; }
+      const date = new Date(val);
+      if (isNaN(date.getTime())) { document.getElementById('resultBox').style.display = 'none'; return; }
+      document.getElementById('tsInput').value = Math.floor(date.getTime() / 1000);
+      showResult(date);
+    }
+
+    function setQuick(key) {
+      let ts = Date.now();
+      const map = {
+        'now': 0, '1h': 3600000, '6h': 21600000, '1d': 86400000,
+        '7d': 604800000, '30d': 2592000000, '1h-ago': -3600000, '1d-ago': -86400000
+      };
+      const offset = map[key] || 0;
+      const target = new Date(ts - offset);
+      document.getElementById('tsInput').value = Math.floor(target.getTime() / 1000);
+      document.getElementById('dateInput').value = toLocalInput(target);
+      showResult(target);
+    }
+
+    function copyCurrentTs() {
+      navigator.clipboard.writeText(document.getElementById('liveTs').textContent).then(() => showToast('已复制当前时间戳'));
+    }
+
+    function clearAll() {
+      document.getElementById('tsInput').value = '';
+      document.getElementById('dateInput').value = '';
+      document.getElementById('resultBox').style.display = 'none';
+    }
+
+    // Live update
+    updateLive();
+    setInterval(updateLive, 1000);
+  </script>
+</body>
+</html>

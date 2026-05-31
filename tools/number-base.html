@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>进制转换 - DevToolBox</title>
+  <meta name="description" content="在线进制转换工具，支持二进制、八进制、十进制、十六进制互转">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .input-row { display: flex; gap: 12px; margin-bottom: 20px; align-items: flex-end; flex-wrap: wrap; }
+    .input-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
+    .input-group label { font-size: 13px; color: #aaa; }
+    .input-group input, .input-group select {
+      background: #2a2a3e; border: 1px solid #3a3a5e; color: #e0e0e0;
+      padding: 10px 14px; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box;
+    }
+    .input-group input { font-family: 'Consolas', monospace; }
+    .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .result-card {
+      background: #1e1e2e; border: 1px solid #3a3a5e; border-radius: 8px; padding: 16px;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .result-card .info { flex: 1; min-width: 0; }
+    .result-card .base-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+    .result-card .value {
+      font-family: 'Consolas', monospace; font-size: 15px; color: #8f8;
+      word-break: break-all; user-select: all;
+    }
+    .result-card .copy-btn {
+      background: #2a2a3e; border: 1px solid #3a3a5e; color: #aaa; padding: 6px 12px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .result-card .copy-btn:hover { background: #6c63ff; color: #fff; border-color: #6c63ff; }
+    .error { color: #f66; font-size: 13px; margin-top: 4px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">← 返回工具箱</a>
+    <div class="tool-page">
+      <div class="tool-header">
+        <h1>🔢 进制转换</h1>
+        <p>支持二进制、八进制、十进制、十六进制之间的相互转换，支持大数</p>
+      </div>
+
+      <div class="input-row">
+        <div class="input-group" style="flex:0 0 auto; min-width:120px;">
+          <label>源进制</label>
+          <select id="fromBase" onchange="convert()">
+            <option value="2">二进制 (2)</option>
+            <option value="8">八进制 (8)</option>
+            <option value="10" selected>十进制 (10)</option>
+            <option value="16">十六进制 (16)</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>输入数值</label>
+          <input type="text" id="numberInput" placeholder="输入数字..." oninput="convert()">
+          <div class="error" id="error"></div>
+        </div>
+      </div>
+
+      <div class="results" id="results">
+        <div class="result-card">
+          <div class="info">
+            <div class="base-label">二进制 (BIN)</div>
+            <div class="value" id="bin">-</div>
+          </div>
+          <button class="copy-btn" onclick="copyResult('bin')">复制</button>
+        </div>
+        <div class="result-card">
+          <div class="info">
+            <div class="base-label">八进制 (OCT)</div>
+            <div class="value" id="oct">-</div>
+          </div>
+          <button class="copy-btn" onclick="copyResult('oct')">复制</button>
+        </div>
+        <div class="result-card">
+          <div class="info">
+            <div class="base-label">十进制 (DEC)</div>
+            <div class="value" id="dec">-</div>
+          </div>
+          <button class="copy-btn" onclick="copyResult('dec')">复制</button>
+        </div>
+        <div class="result-card">
+          <div class="info">
+            <div class="base-label">十六进制 (HEX)</div>
+            <div class="value" id="hex">-</div>
+          </div>
+          <button class="copy-btn" onclick="copyResult('hex')">复制</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg || '已复制';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    function copyResult(id) {
+      const text = document.getElementById(id).textContent;
+      if (text === '-') return;
+      navigator.clipboard.writeText(text).then(() => showToast('已复制'));
+    }
+
+    // BigInt-based conversion for large numbers
+    function convert() {
+      const input = document.getElementById('numberInput').value.trim();
+      const fromBase = parseInt(document.getElementById('fromBase').value);
+      const errorEl = document.getElementById('error');
+      errorEl.style.display = 'none';
+
+      if (!input) {
+        ['bin','oct','dec','hex'].forEach(id => document.getElementById(id).textContent = '-');
+        return;
+      }
+
+      try {
+        // Parse input to BigInt
+        let negative = false;
+        let val = input;
+        if (val.startsWith('-')) { negative = true; val = val.slice(1); }
+
+        // Validate characters for the base
+        const validChars = { 2: /^[01]+$/, 8: /^[0-7]+$/, 10: /^[0-9]+$/, 16: /^[0-9a-fA-F]+$/ };
+        if (!validChars[fromBase].test(val)) {
+          throw new Error('输入包含非法字符');
+        }
+
+        let num = BigInt(0);
+        const bigBase = BigInt(fromBase);
+        for (let i = 0; i < val.length; i++) {
+          let digit = parseInt(val[i], fromBase);
+          num = num * bigBase + BigInt(digit);
+        }
+
+        if (negative) num = -num;
+        const sign = negative ? '-' : '';
+        const absNum = num < 0n ? -num : num;
+
+        document.getElementById('bin').textContent = sign + absNum.toString(2);
+        document.getElementById('oct').textContent = sign + absNum.toString(8);
+        document.getElementById('dec').textContent = sign + absNum.toString(10);
+        document.getElementById('hex').textContent = sign + absNum.toString(16).toUpperCase();
+      } catch (e) {
+        errorEl.textContent = '输入格式错误：' + e.message;
+        errorEl.style.display = 'block';
+        ['bin','oct','dec','hex'].forEach(id => document.getElementById(id).textContent = '-');
+      }
+    }
+  </script>
+</body>
+</html>
